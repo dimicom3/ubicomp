@@ -59,9 +59,7 @@ bool send_data = false;
 void setup()
 {
 
-    // put your setup code here, to run once:
     Serial.begin(115200);
-    // comment out the below line to cancel the wait for USB connection (needed for native USB)
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
 
