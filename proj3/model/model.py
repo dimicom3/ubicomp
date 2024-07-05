@@ -16,7 +16,7 @@ data = pd.DataFrame({
     'humidity': humidity,
     'label': labels
 })
-
+print(data)
 X = data[['temperature', 'humidity']]
 y = data['label']
 

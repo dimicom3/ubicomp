@@ -8,6 +8,9 @@ import paho.mqtt.client as mqtt
 from influxdb import InfluxDBClient
 import tensorflow as tf
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+import os
+
 
 INFLUXDB_ADDRESS = 'influxdb'
 INFLUXDB_USER = 'root'
@@ -21,17 +24,26 @@ MQTT_TOPIC = 'home/+/+'  # [bme280|mijia]/[temperature|humidity|battery|status]
 MQTT_REGEX = 'home/([^/]+)/([^/]+)'
 MQTT_CLIENT_ID = 'MQTTInfluxDBBridge'
 
-MQTT_RESPONSE_TOPIC = 'home/response'
+MQTT_RESPONSE_TOPIC = 'home/dht22/command'
 
 influxdb_client = InfluxDBClient(INFLUXDB_ADDRESS, 8086, INFLUXDB_USER, INFLUXDB_PASSWORD, None)
 
-interpreter = tf.lite.Interpreter(model_path='classification_model.tflite')
+
+model_filename = 'classification_model.tflite'
+current_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(current_dir, model_filename)
+interpreter = tf.lite.Interpreter(model_path=model_path)
 interpreter.allocate_tensors()
 
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
 sensor_cache = {}
+
+scaler = StandardScaler()
+dummy_data = np.array([[0, 0], [45, 100]]) 
+scaler.fit(dummy_data)
+
 
 class SensorData(NamedTuple):
     location: str
@@ -56,7 +68,7 @@ def _parse_mqtt_message(topic, payload):
     if match:
         location = match.group(1)
         measurement = match.group(2)
-        if measurement == 'status':
+        if measurement == 'status' or measurement == 'command':
             return None
         return SensorData(location, measurement, float(payload))
     else:
@@ -91,7 +103,6 @@ def _cache_sensor_data(sensor_data, client):
 
     sensor_cache[location][sensor_data.measurement] = sensor_data.value
 
-    # If both temperature and humidity are available, process the data
     if 'temperature' in sensor_cache[location] and 'humidity' in sensor_cache[location]:
         temperature = sensor_cache[location]['temperature']
         humidity = sensor_cache[location]['humidity']
@@ -100,13 +111,12 @@ def _cache_sensor_data(sensor_data, client):
         sensor_cache[location].pop('humidity')
 
 def _process_and_respond(location, temperature, humidity, client):
-    # Prepare input data for the model
     input_data = np.array([[temperature, humidity]], dtype=np.float32)
-    interpreter.set_tensor(input_details[0]['index'], input_data)
+    input_data_normalized = scaler.transform(input_data)
+    interpreter.set_tensor(input_details[0]['index'], input_data_normalized)
     interpreter.invoke()
     output_data = interpreter.get_tensor(output_details[0]['index'])
 
-    # Example condition: If model predicts 'bad' (output < 0.5)
     if output_data[0] < 0.5:
         response_msg = f'Alert: Temperature and humidity in {location} are bad'
         client.publish(MQTT_RESPONSE_TOPIC, response_msg)

@@ -29,6 +29,11 @@ typedef struct {
     uint32_t n_samples;
 } inference_t;
 
+// IPAddress local_IP(192, 168, 1, 184);
+// IPAddress gateway(192, 168, 1, 1);
+// IPAddress subnet(255, 255, 255, 0);
+
+
 const char *ssid = ".";
 const char *password = ".";
 
@@ -66,7 +71,8 @@ void setup()
     dht.begin();
     init_wifi();
     mqttClient.setServer(MQTT_SERVER, 1883);
-    
+    mqttClient.setCallback(callback); 
+
     if (MDNS.begin("esp32")) {
       Serial.println("MDNS responder started");
     }
@@ -338,6 +344,8 @@ void mqttReconnect() {
 
       // Once connected, publish an announcement...
       mqttClient.publish(MQTT_TOPIC_STATE, "connected", true);
+      mqttClient.subscribe("home/+/+");
+      mqttClient.subscribe("home/dht22/command");
     } else {
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
@@ -355,6 +363,26 @@ void mqttPublish(char* topic, float payload) {
   mqttClient.publish(topic, String(payload).c_str(), true);
 }
 
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  String message;
+
+  for (unsigned int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+    message += (char)payload[i];
+  }
+  Serial.println();
+
+  if (String(topic) == "home/dht22/command") {
+    if (message == "yes") {
+      Serial.println("Starting to send data...");
+    } else if (message == "no") {
+      Serial.println("Stopping data sending...");
+    }
+  }
+}
 
 #if !defined(EI_CLASSIFIER_SENSOR) || EI_CLASSIFIER_SENSOR != EI_CLASSIFIER_SENSOR_MICROPHONE
 #error "Invalid model for current sensor."
