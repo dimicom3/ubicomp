@@ -9,6 +9,9 @@
 #include <DHT.h>
 #include <PubSubClient.h>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 #include <I2S.h>
 #define SAMPLE_RATE 16000U
 #define SAMPLE_BITS 16
@@ -34,10 +37,10 @@ typedef struct {
 // IPAddress subnet(255, 255, 255, 0);
 
 
-const char *ssid = ".";
-const char *password = ".";
+const char *ssid = "";
+const char *password = "";
 
-const char *MQTT_SERVER = "192.168.1.6";
+const char *MQTT_SERVER = "";
 const char *MQTT_USER = "mqttuser"; 
 const char *MQTT_PASSWORD = "mqttpassword"; 
 
@@ -59,7 +62,10 @@ static bool debug_nn = false;
 static bool record_status = true;
 
 bool send_data = false;
+bool blink = false;
+long last_blink_time = 0;
 
+volatile bool blinkLED = false;
 
 void setup()
 {
@@ -104,6 +110,7 @@ void setup()
     }
 
     ei_printf("Recording...\n");
+    xTaskCreate(blinkLEDTask, "BlinkLEDTask", 2048, NULL, 1, NULL);
 }
 
 /**
@@ -141,7 +148,7 @@ void loop()
         ei_printf("    %s: ", result.classification[ix].label);
         ei_printf_float(result.classification[ix].value);
         ei_printf("\n");
-        if (strcmp(result.classification[ix].label, "yes") == 0 && result.classification[ix].value > 0.5) {
+        if (strcmp(result.classification[ix].label, "yes") == 0 && result.classification[ix].value > 0.7) {
             digitalWrite(LED_BUILTIN, HIGH);
             send_data = true;
         } else if (strcmp(result.classification[ix].label, "no") == 0 && result.classification[ix].value > 0.5) {
@@ -376,14 +383,26 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println();
 
   if (String(topic) == "home/dht22/command") {
-    if (message == "yes") {
-      Serial.println("Starting to send data...");
-    } else if (message == "no") {
-      Serial.println("Stopping data sending...");
-    }
+    Serial.print("ALERT!!!");
+    blinkLED = true;
+
   }
 }
 
+void blinkLEDTask(void *pvParameters) {
+  while (true) {
+    if (blinkLED) {
+      for (int i = 0; i < 5; ++i) {
+        digitalWrite(LED_BUILTIN, LOW);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        digitalWrite(LED_BUILTIN, HIGH);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+      }
+      blinkLED = false; // Reset the flag after blinking
+    }
+    vTaskDelay(100 / portTICK_PERIOD_MS); // Check periodically
+  }
+}
 #if !defined(EI_CLASSIFIER_SENSOR) || EI_CLASSIFIER_SENSOR != EI_CLASSIFIER_SENSOR_MICROPHONE
 #error "Invalid model for current sensor."
 #endif
