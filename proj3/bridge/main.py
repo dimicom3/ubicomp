@@ -10,7 +10,8 @@ import tensorflow as tf
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 import os
-
+from flask import Flask, render_template
+from flask_socketio import SocketIO
 
 INFLUXDB_ADDRESS = 'influxdb'
 INFLUXDB_USER = 'root'
@@ -40,10 +41,17 @@ output_details = interpreter.get_output_details()
 
 sensor_cache = {}
 
-scaler = StandardScaler()
-dummy_data = np.array([[0, 0], [45, 100]]) 
-scaler.fit(dummy_data)
+# scaler = StandardScaler()
+# dummy_data = np.array([[0, 0], [45, 100]]) 
+# scaler.fit(dummy_data)
 
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret!'
+socketio = SocketIO(app)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 class SensorData(NamedTuple):
     location: str
@@ -117,10 +125,15 @@ def _process_and_respond(location, temperature, humidity, client):
     interpreter.invoke()
     output_data = interpreter.get_tensor(output_details[0]['index'])
 
+    status = "-"
     if output_data[0] < 0.5:
         response_msg = f'Alert: Temperature and humidity in {location} are bad'
         client.publish(MQTT_RESPONSE_TOPIC, response_msg)
+        status = "-"
+    else:
+        status = "+"
 
+    socketio.emit('data', {'temperature': temperature, 'humidity': humidity, 'status': status})
 def main():
     _init_influxdb_database()
 
@@ -131,7 +144,7 @@ def main():
 
     mqtt_client.connect(MQTT_ADDRESS, 1883)
     mqtt_client.loop_forever()
-
+    socketio.run(app, host='0.0.0.0', port=5000)
 
 if __name__ == '__main__':
     print('MQTT to InfluxDB bridge')
