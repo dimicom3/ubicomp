@@ -21,8 +21,9 @@
 
 #define MQTT_TOPIC_HUMIDITY "home/dht22/humidity"
 #define MQTT_TOPIC_TEMPERATURE "home/dht22/temperature"
+#define MQTT_TOPIC_MIC "home/esp32/mic"
 #define MQTT_TOPIC_STATE "home/dht22/status"
-#define MQTT_PUBLISH_DELAY 60000
+#define MQTT_PUBLISH_DELAY 30000
 #define MQTT_CLIENT_ID "esp32dht22"
 /** Audio buffers, pointers and selectors */
 typedef struct {
@@ -199,7 +200,6 @@ static void capture_samples(void* arg) {
 
   while (record_status) {
 
-    /* read data at once from i2s */
     esp_i2s::i2s_read(esp_i2s::I2S_NUM_0, (void*)sampleBuffer, i2s_bytes_to_read, &bytes_read, 100);
 
     if (bytes_read <= 0) {
@@ -210,7 +210,6 @@ static void capture_samples(void* arg) {
         ei_printf("Partial I2S read");
         }
 
-        // scale the data (otherwise the sound is too quiet)
         for (int x = 0; x < i2s_bytes_to_read/2; x++) {
             sampleBuffer[x] = (int16_t)(sampleBuffer[x]) * 8;
         }
@@ -315,8 +314,6 @@ void init_wifi() {
 }
 
 float readDHTTemperature() {
-  // Sensor readings may also be up to 2 seconds
-  // Read temperature as Celsius (the default)
   float t = dht.readTemperature();
   if (isnan(t)) {    
     Serial.println("Failed to read from DHT sensor!");
@@ -329,7 +326,6 @@ float readDHTTemperature() {
 }
 
 float readDHTHumidity() {
-  // Sensor readings may also be up to 2 seconds
   float h = dht.readHumidity();
   if (isnan(h)) {
     Serial.println("Failed to read from DHT sensor!");
@@ -345,11 +341,9 @@ void mqttReconnect() {
   while (!mqttClient.connected()) {
     Serial.print("Attempting MQTT connection...");
 
-    // Attempt to connect
     if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD, MQTT_TOPIC_STATE, 1, true, "disconnected", false)) {
       Serial.println("connected");
 
-      // Once connected, publish an announcement...
       mqttClient.publish(MQTT_TOPIC_STATE, "connected", true);
       mqttClient.subscribe("home/+/+");
       mqttClient.subscribe("home/dht22/command");
@@ -398,9 +392,9 @@ void blinkLEDTask(void *pvParameters) {
         digitalWrite(LED_BUILTIN, HIGH);
         vTaskDelay(500 / portTICK_PERIOD_MS);
       }
-      blinkLED = false; // Reset the flag after blinking
+      blinkLED = false; 
     }
-    vTaskDelay(100 / portTICK_PERIOD_MS); // Check periodically
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 #if !defined(EI_CLASSIFIER_SENSOR) || EI_CLASSIFIER_SENSOR != EI_CLASSIFIER_SENSOR_MICROPHONE

@@ -29,25 +29,30 @@ typedef struct {
 static inference_t inference;
 static bool record_ready = false;
 static signed short *sampleBuffer;
-static bool debug_nn = false; // Set this to true to see e.g. features generated from the raw signal
+static bool debug_nn = false; 
 static int print_results = -(EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW);
+
+volatile bool blinkLED = false;
+
 
 /**
  * @brief      Arduino setup function
  */
 void setup()
 {
-    // put your setup code here, to run once:
     Serial.begin(115200);
-    // comment out the below line to cancel the wait for USB connection (needed for native USB)
+
     while (!Serial);
     Serial.println("Edge Impulse Inferencing Demo");
 
-    // Initialize the LED pins
+
     pinMode(RED_LED_PIN, OUTPUT);
     pinMode(GREEN_LED_PIN, OUTPUT);
 
-    // summary of inferencing settings (from model_metadata.h)
+
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW);
+
     ei_printf("Inferencing settings:\n");
     ei_printf("\tInterval: %.2f ms.\n", (float)EI_CLASSIFIER_INTERVAL_MS);
     ei_printf("\tFrame size: %d\n", EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE);
@@ -60,6 +65,8 @@ void setup()
         ei_printf("ERR: Could not allocate audio buffer (size %d), this could be due to the window length of your model\r\n", EI_CLASSIFIER_RAW_SAMPLE_COUNT);
         return;
     }
+
+    xTaskCreate(blinkLEDTask, "BlinkLEDTask", 2048, NULL, 1, NULL);
 }
 
 /**
@@ -85,7 +92,6 @@ void loop()
     }
 
     if (++print_results >= (EI_CLASSIFIER_SLICES_PER_MODEL_WINDOW)) {
-        // print the predictions
         ei_printf("Predictions ");
         ei_printf("(DSP: %d ms., Classification: %d ms., Anomaly: %d ms.)",
             result.timing.dsp, result.timing.classification, result.timing.anomaly);
@@ -105,7 +111,10 @@ void loop()
             } else if (strcmp(result.classification[ix].label, "yes") == 0 && result.classification[ix].value > 0.5) {
                 digitalWrite(GREEN_LED_PIN, HIGH);
                 digitalWrite(RED_LED_PIN, LOW);
-            } else {
+            }if (strcmp(result.classification[ix].label, "TEST") == 0 && result.classification[ix].value > 0.5) {
+                blinkLED = true; 
+            }
+             else {
                 digitalWrite(RED_LED_PIN, LOW);
                 digitalWrite(GREEN_LED_PIN, LOW);
             }
@@ -238,6 +247,21 @@ static void microphone_inference_end(void)
     free(inference.buffers[0]);
     free(inference.buffers[1]);
     free(sampleBuffer);
+}
+
+void blinkLEDTask(void *pvParameters) {
+  while (true) {
+    if (blinkLED) {
+      for (int i = 0; i < 5; ++i) {
+        digitalWrite(LED_BUILTIN, LOW);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        digitalWrite(LED_BUILTIN, HIGH);
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+      }
+      blinkLED = false; 
+    }
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+  }
 }
 
 #if !defined(EI_CLASSIFIER_SENSOR) || EI_CLASSIFIER_SENSOR != EI_CLASSIFIER_SENSOR_MICROPHONE

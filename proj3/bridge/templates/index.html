@@ -22,6 +22,7 @@
         <p>Temperature: <span id="temperature">0</span> °C</p>
         <p>Humidity: <span id="humidity">0</span> %</p>
         <p>Status: <span id="status">-</span></p>
+        <p>Mic: <span id="mic">-</span></p>
     </div>
 
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
@@ -33,6 +34,9 @@
             document.getElementById('humidity').textContent = data.humidity;
             document.getElementById('status').textContent = data.status;
         });
+        socket.on('mic', function(data) {
+            document.getElementById('mic').textContent = data.voice;
+        })
     </script>
 </body>
 </html>
